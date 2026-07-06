@@ -1,0 +1,1 @@
+This is a hobby OS project that aims to revive the original 32-bit CPU, the 80386. This is inteded to just be a fun learning experience and something I can enjoy working on.

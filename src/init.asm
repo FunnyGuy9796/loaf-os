@@ -1,11 +1,26 @@
 [org 0x7e00]
 [bits 16]
 
-%include "kernel_size.inc"
+%define SECTOR_SIZE 512
+%define RESERVED_SECTORS 8
+%define FAT_COUNT 2
+%define SECTORS_PER_FAT 9
+%define ROOT_ENTRIES 224
+%define SECTORS_PER_CLUSTER 1
 
-%ifndef KERNEL_SECTORS
-%fatal "KERNEL_SECTORS is not defined - build kernel.bin first (run `make`, not `nasm` directly)"
-%endif
+%define ROOT_START (RESERVED_SECTORS + FAT_COUNT * SECTORS_PER_FAT)
+%define ROOT_SECTORS ((ROOT_ENTRIES * 32 + SECTOR_SIZE - 1) / SECTOR_SIZE)
+%define DATA_START (ROOT_START + ROOT_SECTORS)
+
+%define ROOT_BUF 0x9000
+%define FAT_BUF 0xc000
+%define KERNEL_SEG 0x1000
+
+BPB_BASE equ 0x7c00
+BPB_RESERVED_SECS equ BPB_BASE + 0x0e
+BPB_NUM_FATS equ BPB_BASE + 0x10
+BPB_ROOT_ENTRIES equ BPB_BASE + 0x11
+BPB_SECTORS_PER_FAT equ BPB_BASE + 0x16
 
 BOOT_INFO_SEGMENT equ 0x0000
 BOOT_INFO_OFFSET equ 0x0500
@@ -14,6 +29,7 @@ start:
     mov [bootdrive], dl
 
     cli
+    cld
 
     call check_a20
 
@@ -139,56 +155,7 @@ yes_a20:
 
     jc mem_error
 
-    xor ax, ax
-    mov ds, ax
-    mov ax, [ds:0x040e]
-    mov [es:di+4], ax
-
-    mov byte [sectors_per_track], 63
-
-    mov si, KERNEL_SECTORS
-    mov ax, 0x1000
-    mov es, ax
-    mov bx, 0x0000
-    mov cl, 3
-    mov ch, 0
-    mov dh, 0
-
-read_loop:
-    cmp si, 0
-    je kernel_loaded
-
-    mov ah, 0x02
-    mov al, 1
-    mov dl, [bootdrive]
-    int 0x13
-
-    jc read_error
-
-    add bx, 512
-    inc cl
-    mov al, [sectors_per_track]
-    cmp cl, al
-    jle no_head_bump
-    mov cl, 1
-    inc dh
-no_head_bump:
-    dec si
-    jmp read_loop
-
-read_error:
-    push ax
-    mov ah, 0x0e
-    mov al, '!'
-
-    int 0x10
-    pop ax
-    mov al, ah
-    
-    call print_hex_byte
-
-    cli
-    hlt
+    call load_kernel
 
 kernel_loaded:
     lgdt [gdt_descriptor]
@@ -213,47 +180,184 @@ mem_error:
     cli
     hlt
 
-disk_error:
+load_kernel:
+    call read_bpb
+
+    movzx eax, word [root_start]
+    mov cx, [root_sectors]
+    xor bx, bx
+    mov es, bx
+    mov bx, ROOT_BUF
+    call read_sectors
+
+    xor bx, bx
+    mov es, bx
+    mov di, ROOT_BUF
+    mov cx, [root_entries]
+.scan:
+    cmp byte [es:di], 0x00
+    je  .fail
+
+    pusha
+
+    mov si, kernel_name
+    mov cx, 11
+
+    repe cmpsb
+
+    popa
+
+    je  .found
+
+    add di, 32
+    dec cx
+
+    jnz .scan
+    jmp .fail
+
+.found:
+    mov ax, [es:di + 0x1a]
+    mov [cur_cluster], ax
+
+    mov eax, [es:di + 0x1c]
+    mov [kernel_size], eax
+
+    movzx eax, word [reserved_sectors]
+    mov cx, [sectors_per_fat]
+    xor bx, bx
+    mov es, bx
+    mov bx, FAT_BUF
+
+    call read_sectors
+
+    mov dx, KERNEL_SEG
+.chain:
+    mov ax, [cur_cluster]
+
+    cmp ax, 0x0ff8
+    jae .done
+
+    mov es, dx
+    xor bx, bx
+
+    push dx
+    sub ax, 2
+    movzx bx, byte [sectors_per_cluster]
+    mul bx
+    add ax, [data_start]
+    movzx eax, ax
+    movzx cx, byte [sectors_per_cluster]
+    
+    pop dx
+
+    xor bx, bx
+    call read_sectors
+
+    movzx ax, byte [sectors_per_cluster]
+    shl ax, 5
+    add dx, ax
+
+    call next_cluster
+
+    jmp .chain
+.done:
+    ret
+.fail:
+    jmp fat_error
+
+next_cluster:
+    push dx
+
+    mov ax, [cur_cluster]
+    mov bx, ax
+    shr bx, 1
+    add bx, ax
+    add bx, FAT_BUF
+    mov dx, [bx]
+
+    test ax, 1
+    jz  .even
+
+    shr dx, 4
+    jmp .store
+.even:
+    and dx, 0x0fff
+.store:
+    mov [cur_cluster], dx
+
+    pop dx
+
+    ret
+
+read_sectors:
+    push dx
+
+    mov [dap_lba], eax
+    mov [dap_cnt], cx
+    mov [dap_off], bx
+    mov [dap_seg], es
+    mov ah, 0x42
+    mov dl, [bootdrive]
+    mov si, dap
+
+    int 0x13
+
+    jc  fat_error
+
+    pop dx
+
+    ret
+
+read_bpb:
+    mov ax, [BPB_RESERVED_SECS]
+    mov [reserved_sectors], ax
+    mov ax, [BPB_SECTORS_PER_FAT]
+    mov [sectors_per_fat], ax
+    mov ax, [BPB_ROOT_ENTRIES]
+    mov [root_entries], ax
+    mov al, [BPB_NUM_FATS]
+    mov [fat_count], al
+    mov al, [BPB_BASE + 0x0d]
+    mov [sectors_per_cluster], al
+
+    mov ax, [sectors_per_fat]
+    movzx bx, byte [fat_count]
+    mul bx
+    add ax, [reserved_sectors]
+    mov [root_start], ax
+
+    mov ax, [root_entries]
+    mov bx, 32
+    mul bx
+    add ax, SECTOR_SIZE - 1
+    adc dx, 0
+    mov bx, SECTOR_SIZE
+    div bx
+    mov [root_sectors], ax
+
+    mov ax, [root_start]
+    add ax, [root_sectors]
+    mov [data_start], ax
+
+    ret
+
+align 4
+dap: db 0x10
+        db 0
+dap_cnt: dw 0
+dap_off: dw 0
+dap_seg: dw 0
+dap_lba: dd 0
+        dd 0
+cur_cluster: dw 0
+kernel_name: db "KERNEL  BIN"
+
+fat_error:
     mov ah, 0x0e
-    mov al, '!'
-
+    mov al, 'F'
     int 0x10
-
-    mov ah, 0x0e
-    mov al, 'R'
-
-    int 0x10
-
     cli
     hlt
-
-print_hex_byte:
-    push ax
-    mov bl, al
-
-    mov al, bl
-    shr al, 4
-    call print_hex_nibble
-
-    mov al, bl
-    and al, 0x0f
-    call print_hex_nibble
-
-    pop ax
-    ret
-
-print_hex_nibble:
-    and al, 0x0f
-    cmp al, 9
-    jle .digit
-    add al, 'A' - 10
-    jmp .print
-.digit:
-    add al, '0'
-.print:
-    mov ah, 0x0e
-    int 0x10
-    ret
 
 gdt_start:
     dq 0x0000000000000000
@@ -281,7 +385,15 @@ gdt_descriptor:
     dd gdt_start
 
 bootdrive: db 0
-sectors_per_track: db 0
+kernel_size: dd 0
+reserved_sectors: dw 0
+sectors_per_fat: dw 0
+root_entries: dw 0
+fat_count: db 0
+root_start: dw 0
+root_sectors: dw 0
+data_start: dw 0
+sectors_per_cluster: db 0
 
 [bits 32]
 
@@ -297,7 +409,9 @@ protected_entry:
 
     mov esi, 0x10000
     mov edi, 0x100000
-    mov ecx, KERNEL_SECTORS * 512 / 4
+    mov ecx, [kernel_size]
+    add ecx, 3
+    shr ecx, 2
     rep movsd
 
     mov ebx, 0x500

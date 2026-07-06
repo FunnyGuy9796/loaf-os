@@ -36,15 +36,8 @@ $(BUILD_DIR):
 $(MBR_BIN): $(SRC_DIR)/mbr.asm | $(BUILD_DIR)
 	$(AS) $< -f bin -o $@
 
-$(INIT_BIN): $(SRC_DIR)/init.asm $(KSIZE_INC) | $(BUILD_DIR)
+$(INIT_BIN): $(SRC_DIR)/init.asm | $(BUILD_DIR)
 	$(AS) -I $(BUILD_DIR)/ $< -f bin -o $@
-
-$(KSIZE_INC): $(KERNEL_BIN)
-	@SIZE=$$(stat -c%s $(KERNEL_BIN) 2>/dev/null || stat -f%z $(KERNEL_BIN)); \
-	SECTORS=$$(( (SIZE + 511) / 512 )); \
-	echo "; auto-generated, do not edit" > $@; \
-	echo "%define KERNEL_SECTORS $$SECTORS" >> $@; \
-	echo "Kernel: $$SIZE bytes -> $$SECTORS sectors"
 
 $(ENTRY_OBJ): $(SRC_DIR)/entry.asm | $(BUILD_DIR)
 	$(AS) -f elf32 $< -o $@
@@ -63,11 +56,14 @@ $(KERNEL_ELF): $(KERNEL_OBJS) linker.ld
 $(KERNEL_BIN): $(KERNEL_ELF)
 	$(OBJCOPY) -O binary $< $@
 
-$(IMG): $(MBR_BIN) $(INIT_BIN) $(KERNEL_BIN)
-	dd if=/dev/zero of=$(IMG) bs=1M count=16
-	dd if=$(MBR_BIN) of=$(IMG) bs=512 seek=0 conv=notrunc
+$(IMG): $(MBR_BIN) $(INIT_BIN) $(KERNEL_BIN) hello.txt
+	dd if=/dev/zero of=$(IMG) bs=512 count=2880
+	mkfs.fat -F 12 -R 8 -n LOAFOS $(IMG)
+	mcopy -i $(IMG) $(KERNEL_BIN) ::/KERNEL.BIN
+	mcopy -i $(IMG) hello.txt ::/HELLO.TXT
+	dd if=$(MBR_BIN)  of=$(IMG) bs=1 count=3 seek=0 conv=notrunc
+	dd if=$(MBR_BIN)  of=$(IMG) bs=1 skip=62 seek=62 count=448 conv=notrunc
 	dd if=$(INIT_BIN) of=$(IMG) bs=512 seek=1 conv=notrunc
-	dd if=$(KERNEL_BIN) of=$(IMG) bs=512 seek=2 conv=notrunc
 
 run: $(IMG)
 	qemu-system-i386 -hda $(IMG) \

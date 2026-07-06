@@ -3,6 +3,7 @@
 #include "linker_syms.h"
 #include "vga.h"
 #include "misc/printf.h"
+#include "misc/mem.h"
 #include "mm/pmm.h"
 #include "mm/paging.h"
 #include "mm/heap.h"
@@ -11,6 +12,7 @@
 #include "devices/kbd.h"
 #include "devices/rtc.h"
 #include "devices/ata.h"
+#include "fat.h"
 
 uint32_t kstart = (uint32_t)&_kernel_start;
 uint32_t kend = (uint32_t)&_kernel_end;
@@ -33,6 +35,9 @@ void kmain(raw_boot_info_t *raw) {
 
     pit_init(100);
     rtc_init();
+    
+    if (fat_init())
+        panic("kernel.c: kmain() -> fat_init() failed\n");
 
     __asm__ volatile ("sti");
 
@@ -45,8 +50,21 @@ void kmain(raw_boot_info_t *raw) {
     printf("   /\\_/\\\n");
     printf("  ( o.o )\n");
     printf("   > ^ <\n");
-    printf("   )   (\n");
-    printf("\nThis is a hobby OS project that aims to revive the original 32-bit CPU, the 80386. This is inteded to just be a fun learning experience and something I can enjoy working on.\n");
+    printf("   )   (\n\n");
+
+    fat_stat_t st;
+    uint32_t size;
+    uint32_t buf;
+
+    if (fat_stat("HELLO.TXT", &st) == 0)
+        buf = kmalloc(st.size);
+    else
+        panic("HELLO.TXT not found\n");
+
+    if (fat_read_file("HELLO.TXT", (void *)buf, &size))
+        printf("read failed\n");
+    else
+        printf("%s\n\n", (char *)buf);
 
     for (;;) {
         char c = kbd_getchar();

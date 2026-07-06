@@ -1,5 +1,5 @@
-#ifndef FAT12_H
-#define FAT12_H
+#ifndef FAT_H
+#define FAT_H
 
 #include <stdint.h>
 
@@ -42,5 +42,30 @@ typedef struct __attribute__((packed)) {
     uint16_t first_cluster_low;
     uint32_t file_size;
 } fat12_dirent_t;
+
+typedef struct {
+    char name[13];
+    uint32_t size;
+    uint16_t first_cluster;
+    uint8_t attr;
+} fat_stat_t;
+
+typedef struct {
+    char name[13];
+    uint32_t size;
+    uint16_t first_cluster;
+    uint8_t attr;
+} fat_dirent_info_t;
+
+int fat_init();
+int fat_read_file(const char *path, void *dest, uint32_t *size_out);
+int fat_write_file(const char *path, const void *data, uint32_t size);
+int fat_write_at(const char *path, uint32_t offset, const void *data, uint32_t len);
+int fat_delete_file(const char *path);
+int fat_stat(const char *path, fat_stat_t *out);
+int fat_mkdir(const char *path);
+int fat_rmdir(const char *path);
+int fat_opendir(const char *path, uint16_t *dir_cluster_out);
+int fat_readdir(uint16_t dir_cluster, uint32_t index, fat_dirent_info_t *out);
 
 #endif

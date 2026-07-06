@@ -13,6 +13,8 @@
 #define ATA_STATUS 0x1f7
 
 #define ATA_CMD_READ_SECTORS 0x20
+#define ATA_CMD_WRITE_SECTORS 0x30
+#define ATA_CMD_CACHE_FLUSH 0xe7
 
 #define ATA_SR_BSY 0x80
 #define ATA_SR_DRQ 0x08
@@ -71,6 +73,47 @@ int ata_read_sectors(uint16_t cylinder, uint8_t head, uint8_t sector, uint8_t co
         
         buf += 256;
     }
+
+    return 0;
+}
+
+int ata_write_sectors(uint16_t cylinder, uint8_t head, uint8_t sector, uint8_t count, const void *buffer) {
+    const uint16_t *buf = (const uint16_t *)buffer;
+
+    ata_wait_bsy();
+
+    outb(ATA_DRIVE_HEAD, 0xa0 | (head & 0x0f));
+
+    ata_400ns_delay();
+    ata_wait_bsy();
+
+    outb(ATA_SECCOUNT, count);
+    outb(ATA_SECTOR, sector);
+    outb(ATA_CYL_LOW, (uint8_t)(cylinder & 0xff));
+    outb(ATA_CYL_HIGH, (uint8_t)((cylinder >> 8) & 0xff));
+    outb(ATA_COMMAND, ATA_CMD_WRITE_SECTORS);
+
+    ata_400ns_delay();
+
+    for (uint8_t s = 0; s < count; s++) {
+        ata_wait_bsy();
+
+        uint8_t status = inb(ATA_STATUS);
+
+        if (status & ATA_SR_ERR)
+            return 1;
+
+        ata_wait_drq();
+
+        for (int i = 0; i < 256; i++)
+            outw(ATA_DATA, buf[i]);
+
+        buf += 256;
+    }
+
+    outb(ATA_COMMAND, ATA_CMD_CACHE_FLUSH);
+    
+    ata_wait_bsy();
 
     return 0;
 }
