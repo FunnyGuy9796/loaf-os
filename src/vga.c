@@ -78,6 +78,9 @@ void term_write(const char *data) {
 }
 
 void term_clear() {
+    term_column = 0;
+    term_row = 0;
+    
     for (size_t y = 0; y < VGA_HEIGHT; y++) {
         for (size_t x = 0; x < VGA_WIDTH; x++) {
             size_t index = y * VGA_WIDTH + x;

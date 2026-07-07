@@ -1,5 +1,5 @@
 #include "kbd.h"
-#include "../misc/printf.h"
+#include "../misc/util.h"
 
 #define KBD_DATA_PORT 0x60
 #define KBD_BUFFER_SIZE 256

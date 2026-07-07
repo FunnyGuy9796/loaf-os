@@ -2,7 +2,7 @@
 #include "paging.h"
 #include "../misc/printf.h"
 
-boot_info_t *boot_info;
+boot_info_t boot_info;
 uint32_t *phys_bitmap;
 uint32_t bitmap_size = 0;
 
@@ -45,52 +45,57 @@ static inline int test_frame(uint32_t addr) {
 }
 
 void pmm_init(raw_boot_info_t *raw, uint32_t kend, uint32_t highest_addr) {
-    boot_info->conv_mem = raw->conv_kb;
-    boot_info->ext_mem = raw->ext_kb;
-    boot_info->ebda_start = (uint32_t)raw->ebda_segment * 16;
+    boot_info.conv_mem = raw->conv_kb;
+    boot_info.ext_mem = raw->ext_kb;
+    boot_info.ebda_start = (uint32_t)raw->ebda_segment * 16;
 
     uint8_t i = 0;
 
-    boot_info->regions[i++] = (mem_region_t){ 0x00000, 0x500, MEM_RESERVED };
+    boot_info.regions[i++] = (mem_region_t){ 0x00000, 0x500, MEM_RESERVED };
 
-    uint32_t conv_end = (uint32_t)raw->conv_kb * 1024;
+    uint32_t conv_end = (uint32_t)boot_info.conv_mem * 1024;
 
-    boot_info->regions[i++] = (mem_region_t){ 0x500, conv_end - 0x500, MEM_USABLE };
+    boot_info.regions[i++] = (mem_region_t){ 0x500, conv_end - 0x500, MEM_USABLE };
 
     if (conv_end < 0xa0000)
-        boot_info->regions[i++] = (mem_region_t){ conv_end, 0xa0000 - conv_end, MEM_RESERVED };
+        boot_info.regions[i++] = (mem_region_t){ conv_end, 0xa0000 - conv_end, MEM_RESERVED };
     
-    boot_info->regions[i++] = (mem_region_t){ 0xa0000, 0x20000, MEM_RESERVED };
-    boot_info->regions[i++] = (mem_region_t){ 0xc0000, 0x8000, MEM_RESERVED };
-    boot_info->regions[i++] = (mem_region_t){ 0xc8000, 0x28000, MEM_RESERVED };
-    boot_info->regions[i++] = (mem_region_t){ 0xf0000, 0x10000, MEM_RESERVED };
+    boot_info.regions[i++] = (mem_region_t){ 0xa0000, 0x20000, MEM_RESERVED };
+    boot_info.regions[i++] = (mem_region_t){ 0xc0000, 0x8000, MEM_RESERVED };
+    boot_info.regions[i++] = (mem_region_t){ 0xc8000, 0x28000, MEM_RESERVED };
+    boot_info.regions[i++] = (mem_region_t){ 0xf0000, 0x10000, MEM_RESERVED };
 
-    if (raw->ext_kb > 0)
-        boot_info->regions[i++] = (mem_region_t){ 0x100000, (uint32_t)raw->ext_kb * 1024, MEM_USABLE };
+    if (boot_info.ext_mem > 0)
+        boot_info.regions[i++] = (mem_region_t){ 0x100000, (uint32_t)boot_info.ext_mem * 1024, MEM_USABLE };
 
-    boot_info->region_count = i;
-    phys_bitmap = (uint32_t *)((kend + 0xfff) & ~0xfffULL);
+    boot_info.region_count = i;
+
+    uint32_t bitmap_phys = (kend + 0xfff) & ~0xfffU;
+
+    phys_bitmap = (uint32_t *)phys_to_virt(bitmap_phys);
 
     uint32_t total_frames = highest_addr / PAGE_SIZE;
 
     bitmap_size = (total_frames + 31) / 32;
     
-    for (uint8_t i = 0; i < boot_info->region_count; i++) {
-        mem_region_t region = boot_info->regions[i];
+    for (uint8_t i = 0; i < boot_info.region_count; i++) {
+        mem_region_t region = boot_info.regions[i];
 
         if (region.type == MEM_RESERVED) {
             for (uint32_t addr = region.base; addr < region.base + region.length; addr += PAGE_SIZE)
                 set_frame(addr);
         } else if (region.type == MEM_USABLE) {
-            for (uint32_t addr = region.base; addr < region.base + region.length; addr += PAGE_SIZE)
+            uint32_t start = (region.base + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+            uint32_t end = region.base + region.length;
+
+            for (uint32_t addr = start; addr < end; addr += PAGE_SIZE)
                 clear_frame(addr);
         }
     }
 
-    uint32_t bitmap_start = (uint32_t)phys_bitmap;
-    uint32_t bitmap_end = bitmap_start + (bitmap_size * sizeof(uint32_t));
+    uint32_t bitmap_end_phys = bitmap_phys + (bitmap_size * sizeof(uint32_t));
 
-    for (uint32_t addr = bitmap_start; addr < bitmap_end; addr += PAGE_SIZE)
+    for (uint32_t addr = bitmap_phys; addr < bitmap_end_phys; addr += PAGE_SIZE)
         set_frame(addr);
 }
 

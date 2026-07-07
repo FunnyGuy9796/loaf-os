@@ -1,6 +1,5 @@
 #include "pit.h"
 #include "../misc/util.h"
-#include "../misc/printf.h"
 
 #define PIT_CHANNEL0 0x40
 #define PIT_COMMAND 0x43

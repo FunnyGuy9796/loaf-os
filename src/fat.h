@@ -18,7 +18,6 @@ typedef struct __attribute__((packed)) {
     uint16_t head_count;
     uint32_t hidden_sectors;
     uint32_t total_sectors_32;
-
     uint8_t drive_number;
     uint8_t reserved1;
     uint8_t boot_signature;
@@ -67,5 +66,6 @@ int fat_mkdir(const char *path);
 int fat_rmdir(const char *path);
 int fat_opendir(const char *path, uint16_t *dir_cluster_out);
 int fat_readdir(uint16_t dir_cluster, uint32_t index, fat_dirent_info_t *out);
+uint32_t fat_read_alloc_size(uint32_t file_size);
 
 #endif

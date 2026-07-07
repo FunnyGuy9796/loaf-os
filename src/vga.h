@@ -3,10 +3,11 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include "arch.h"
 
 #define VGA_WIDTH 80
 #define VGA_HEIGHT 25
-#define VGA_ADDR 0xb8000
+#define VGA_ADDR (KERNEL_VIRT_BASE + 0xb8000)
 
 enum vga_color {
 	VGA_COLOR_BLACK = 0,

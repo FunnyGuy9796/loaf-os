@@ -6,16 +6,18 @@
 static block_header_t *free_list = NULL;
 static uint32_t heap_start = 0;
 static uint32_t heap_end = 0;
+static uint32_t heap_start_virt = 0;
 
 void heap_init(uint32_t num_frames) {
     heap_start = pmm_alloc_frames(num_frames);
+    heap_start_virt = (uint32_t)phys_to_virt(heap_start);
 
-    free_list = (block_header_t *)heap_start;
+    free_list = (block_header_t *)phys_to_virt(heap_start);
     free_list->size = (num_frames * PAGE_SIZE) - BLOCK_HEADER_SIZE;
     free_list->next = NULL;
     free_list->free = 1;
 
-    heap_end = heap_start + free_list->size;
+    heap_end = (uint32_t)free_list + free_list->size;
 }
 
 uint32_t kmalloc(uint32_t bytes) {
@@ -52,7 +54,7 @@ void kfree(uint32_t ptr) {
     if (ptr == 0)
         return;
     
-    if (ptr < heap_start || ptr >= heap_end) {
+    if (ptr < heap_start_virt || ptr >= heap_end) {
         printf("[W] heap.c: kfree() -> pointer 0x%x outside heap bounds\n", ptr);
 
         return;
@@ -76,5 +78,16 @@ void kfree(uint32_t ptr) {
             curr->next = curr->next->next;
         } else
             curr = curr->next;
+    }
+}
+
+void heap_dump() {
+    block_header_t *curr = free_list;
+    int i = 0;
+
+    while (curr) {
+        printf("[%d] addr=0x%x size=%d free=%d next=0x%x\n", i++, (uint32_t)curr, curr->size, curr->free, (uint32_t)curr->next);
+
+        curr = curr->next;
     }
 }

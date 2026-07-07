@@ -1,6 +1,5 @@
 #include "ata.h"
 #include "../misc/util.h"
-#include "../misc/printf.h"
 
 #define ATA_DATA 0x1f0
 #define ATA_ERROR 0x1f1

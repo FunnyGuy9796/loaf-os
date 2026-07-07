@@ -2,7 +2,6 @@
 #include "devices/ata.h"
 #include "misc/util.h"
 #include "misc/mem.h"
-#include "misc/printf.h"
 #include "mm/heap.h"
 
 #define SECTOR_SIZE 512
@@ -1009,4 +1008,10 @@ int fat_readdir(uint16_t dir_cluster, uint32_t index, fat_dirent_info_t *out) {
     }
 
     return 2;
+}
+
+uint32_t fat_read_alloc_size(uint32_t file_size) {
+    uint32_t cluster_size = (uint32_t)bpb.sectors_per_cluster * SECTOR_SIZE;
+    
+    return (file_size + cluster_size - 1) & ~(cluster_size - 1);
 }

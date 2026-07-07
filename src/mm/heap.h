@@ -15,5 +15,6 @@ typedef struct block_header {
 void heap_init(uint32_t num_frames);
 uint32_t kmalloc(uint32_t bytes);
 void kfree(uint32_t ptr);
+void heap_dump();
 
 #endif

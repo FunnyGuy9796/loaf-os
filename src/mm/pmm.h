@@ -10,7 +10,7 @@
 #define BITS_SHIFT 5
 #define BITS_MASK 31
 
-extern boot_info_t *boot_info;
+extern boot_info_t boot_info;
 extern uint32_t *phys_bitmap;
 extern uint32_t bitmap_size;
 

@@ -1,29 +1,40 @@
 ENTRY(_start)
 
-KERNEL_LOAD_ADDR = 0x100000;
+KERNEL_PHYS_BASE = 0x00100000;
+KERNEL_VIRT_BASE = 0xc0000000;
 
 SECTIONS {
-    . = KERNEL_LOAD_ADDR;
+    . = KERNEL_PHYS_BASE;
 
     _kernel_start = .;
 
-    .text ALIGN(4) : {
+    .text.boot ALIGN(4) : {
+        *(.text.boot)
+    }
+
+    .data.boot ALIGN(4096) : {
+        *(.data.boot)
+    }
+
+    . += KERNEL_VIRT_BASE;
+
+    .text ALIGN(4) : AT(ADDR(.text) - KERNEL_VIRT_BASE) {
         *(.text.entry)
         *(.text)
         *(.text.*)
     }
 
-    .rodata ALIGN(4) : {
+    .rodata ALIGN(4) : AT(ADDR(.rodata) - KERNEL_VIRT_BASE) {
         *(.rodata)
         *(.rodata.*)
     }
 
-    .data ALIGN(4) : {
+    .data ALIGN(4) : AT(ADDR(.data) - KERNEL_VIRT_BASE) {
         *(.data)
         *(.data.*)
     }
 
-    .bss ALIGN(4) : {
+    .bss ALIGN(4) : AT(ADDR(.bss) - KERNEL_VIRT_BASE) {
         _bss_start = .;
         *(COMMON);
         *(.bss)
@@ -32,7 +43,6 @@ SECTIONS {
     }
 
     _kernel_end = .;
-    _kernel_size = _kernel_end - _kernel_start;
 
     /DISCARD/ : {
         *(.comment)

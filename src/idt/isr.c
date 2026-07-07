@@ -21,6 +21,6 @@ void isr_handler(registers_t *regs) {
         }
 
         default:
-            printf("Unhandled interrupt: %d\n", regs->int_no);
+            printf("unhandled interrupt: %d\n", regs->int_no);
     }
 }
