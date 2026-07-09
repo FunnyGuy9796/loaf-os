@@ -151,3 +151,42 @@ int paging_walk(uint32_t pd_phys, uint32_t vaddr, uint32_t *paddr_out) {
 
     return 0;
 }
+
+int paging_validate_user_range(uint32_t pd_phys, uint32_t vaddr, uint32_t size, int need_write) {
+    if (size == 0)
+        return 1;
+
+    uint32_t start = vaddr & ~0xfff;
+    uint32_t end   = (vaddr + size - 1) & ~0xfff;
+
+    if (vaddr + size < vaddr)
+        return 0;
+
+    for (uint32_t page = start; page <= end; page += PAGE_SIZE) {
+        uint32_t pd_index = page >> 22;
+        uint32_t pt_index = (page >> 12) & 0x3ff;
+        uint32_t *pd = (uint32_t *)phys_to_virt(pd_phys);
+
+        if (!(pd[pd_index] & PAGE_PRESENT))
+            return 0;
+
+        if (!(pd[pd_index] & PAGE_USER))
+            return 0;
+
+        uint32_t *pt = (uint32_t *)phys_to_virt(pd[pd_index] & ~0xfff);
+
+        if (!(pt[pt_index] & PAGE_PRESENT))
+            return 0;
+
+        if (!(pt[pt_index] & PAGE_USER))
+            return 0;
+
+        if (need_write && !(pt[pt_index] & PAGE_RW))
+            return 0;
+
+        if (page > 0xfffff000 - PAGE_SIZE)
+            break;
+    }
+
+    return 1;
+}

@@ -1,8 +1,8 @@
 #include "fat.h"
-#include "devices/ata.h"
-#include "misc/util.h"
-#include "misc/mem.h"
-#include "mm/heap.h"
+#include "../devices/ata.h"
+#include "../misc/util.h"
+#include "../misc/mem.h"
+#include "../mm/heap.h"
 
 #define SECTOR_SIZE 512
 #define DIRENT_SIZE 32

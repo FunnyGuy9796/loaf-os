@@ -28,5 +28,6 @@ void paging_switch_directory(uint32_t pd_phys);
 void paging_init(uint32_t highest_addr);
 uint32_t paging_kernel_directory();
 int paging_walk(uint32_t pd_phys, uint32_t vaddr, uint32_t *paddr_out);
+int paging_validate_user_range(uint32_t pd_phys, uint32_t vaddr, uint32_t size, int need_write);
 
 #endif

@@ -13,6 +13,8 @@ SECTIONS {
         *(.rodata.*)
     }
 
+    _data_start = .;
+
     .data : {
         *(.data)
         *(.data.*)
@@ -22,4 +24,6 @@ SECTIONS {
         *(COMMON)
         *(.bss)
     }
+
+    _bss_end = .;
 }

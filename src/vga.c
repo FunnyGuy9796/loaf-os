@@ -10,6 +10,24 @@ static inline uint16_t vga_entry(unsigned char uc, uint8_t color) {
 	return (uint16_t) uc | (uint16_t) color << 8;
 }
 
+static void term_scroll() {
+    for (size_t y = 1; y < VGA_HEIGHT; y++) {
+        for (size_t x = 0; x < VGA_WIDTH; x++)
+            term_buffer[(y - 1) * VGA_WIDTH + x] = term_buffer[y * VGA_WIDTH + x];
+    }
+
+    for (size_t x = 0; x < VGA_WIDTH; x++)
+        term_buffer[(VGA_HEIGHT - 1) * VGA_WIDTH + x] = vga_entry(' ', term_color);
+}
+
+static void term_advance_row() {
+    if (++term_row >= VGA_HEIGHT) {
+        term_scroll();
+        
+        term_row = VGA_HEIGHT - 1;
+    }
+}
+
 void term_putentryat(char c, uint8_t color, size_t x, size_t y)  {
 	const size_t index = y * VGA_WIDTH + x;
 
@@ -33,22 +51,18 @@ void term_putchar(char c) {
     if (c == '\n') {
         term_column = 0;
         
-        if (++term_row >= VGA_HEIGHT)
-            term_row = 0;
+        term_advance_row();
     } else if (c == '\t') {
-        if (++term_column >= VGA_WIDTH) {
+        term_column = (term_column + 4) & ~3;
+        
+        if (term_column >= VGA_WIDTH) {
             term_column = 0;
 
-            if (++term_row >= VGA_HEIGHT)
-                term_row = 0;
+            term_advance_row();
         }
-
-        term_column += 3;
     } else if (c == '\b') {
-        if (term_column <= 0) {
-            if (term_row <= 0)
-                term_row = VGA_HEIGHT - 1;
-            else
+        if (term_column == 0) {
+            if (term_row > 0)
                 term_row--;
 
             term_column = VGA_WIDTH - 1;
@@ -58,12 +72,11 @@ void term_putchar(char c) {
         term_putentryat(' ', term_color, term_column, term_row);
     } else {
         term_putentryat(c, term_color, term_column, term_row);
-
+        
         if (++term_column >= VGA_WIDTH) {
             term_column = 0;
 
-            if (++term_row >= VGA_HEIGHT)
-                term_row = 0;
+            term_advance_row();
         }
     }
 

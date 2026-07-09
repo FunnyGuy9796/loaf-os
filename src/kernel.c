@@ -14,7 +14,7 @@
 #include "devices/kbd.h"
 #include "devices/rtc.h"
 #include "devices/ata.h"
-#include "fat.h"
+#include "fs/fat.h"
 #include "multi/process.h"
 
 extern uint32_t stack_top;
@@ -40,50 +40,28 @@ void kmain(raw_boot_info_t *raw) {
 
     outb(PIC2_DATA, mask | (1 << 6));
 
-    pit_init(100);
+    pit_init(1000);
     rtc_init();
     
     if (fat_init())
         panic("kernel.c: kmain() -> fat_init() failed\n");
 
     __asm__ volatile ("sti");
-
-    printf("\nloaf-os\n");
-    
-    rtc_time_t t = rtc_now();
-
-    printf("\n%02d:%02d:%02d %02d-%02d-%04d\n\n", t.hours, t.minutes, t.seconds, t.month, t.day, t.year);
-
-    printf("   /\\_/\\\n");
-    printf("  ( o.o )\n");
-    printf("   > ^ <\n");
-    printf("   )   (\n\n");
-
-    fat_stat_t st;
-    uint32_t size;
-    uint32_t buf;
-
-    if (fat_stat("hello.txt", &st) == 0)
-        buf = kmalloc(fat_read_alloc_size(st.size));
-    else
-        panic("kernel.c: kmain() -> hello.txt not found\n");
-
-    if (fat_read_file("hello.txt", (void *)buf, &size))
-        panic("kernel.c: kmain() -> read failed\n");
-    else
-        printf("%s\n\n", (char *)buf);
     
     int err = 0;
+    process_t *idle = process_create("idle.bin", &err);
     process_t *init = process_create("init.bin", &err);
 
-    if (!init) {
-        __asm__ volatile ("cli");
+    if (!idle)
+        panic("kernel.c: kmain() -> idle process not found\n");
 
-        for (;;)
-            __asm__ volatile ("hlt");
-    }
+    if (!init)
+        panic("kernel.c: kmain() -> init process not found\n");
     
-    printf("loaded init.bin, pid=%d, entry=0x%x\n", init->pid, init->entry_point);
+    scheduler_add(init);
+
+    idle_proc = idle;
+    scheduler_ready = 1;
 
     process_run(init);
 }
