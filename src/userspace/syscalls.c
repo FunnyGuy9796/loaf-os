@@ -59,8 +59,6 @@ void syscall_dispatch(registers_t *regs) {
             curr_proc->state = PROC_DEAD;
             curr_proc->exit_code = regs->ebx;
 
-            process_cleanup(curr_proc);
-
             for (process_t *proc = proc_list; proc != NULL; proc = proc->next) {
                 if (proc->state != PROC_BLOCKED || proc->block != PROC_PID)
                     continue;

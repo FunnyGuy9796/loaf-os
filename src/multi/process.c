@@ -176,6 +176,7 @@ process_t *process_create(const char *path, int argc, char *const argv[], int *e
     proc->exit_code = -1;
     proc->state = PROC_READY;
     proc->block = PROC_NONE;
+    proc->cleaned_up = 0;
 
     set_proc_name(proc, path);
     set_proc_cwd(proc, NULL);

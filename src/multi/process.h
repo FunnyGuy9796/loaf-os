@@ -51,6 +51,7 @@ typedef struct process {
     proc_block_t block;
     char name[MAX_PROC_NAME];
     char cwd[MAX_BUF];
+    int cleaned_up;
     struct process *next;
 } process_t;
 

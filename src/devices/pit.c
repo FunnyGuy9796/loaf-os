@@ -20,8 +20,12 @@ void pit_handler() {
 
     if (scheduler_ready) {
         for (process_t *proc = proc_list; proc != NULL; proc = proc->next) {
-            if (proc->state == PROC_DEAD) {
-                process_cleanup(proc);
+            if (proc->state == PROC_DEAD && !proc->cleaned_up) {
+                if (proc != curr_proc) {
+                    process_cleanup(proc);
+
+                    proc->cleaned_up = 1;
+                }
 
                 continue;
             }
