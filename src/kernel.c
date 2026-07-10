@@ -26,7 +26,6 @@ void kmain(raw_boot_info_t *raw) {
 
     uint16_t ext_kb = raw->ext_kb;
     uint32_t highest_addr = 0x100000 + ((uint32_t)ext_kb * 1024);
-    uint32_t total_frames = highest_addr / PAGE_SIZE;
     uint32_t kend_phys = (uint32_t)&_kernel_end - KERNEL_VIRT_BASE;
 
     pmm_init(raw, kend_phys, highest_addr);
@@ -49,11 +48,19 @@ void kmain(raw_boot_info_t *raw) {
     __asm__ volatile ("sti");
     
     int err = 0;
-    process_t *idle = process_create("idle.bin", &err);
-    process_t *init = process_create("init.bin", &err);
+
+    char *idle_argv[] = { "idle.bin" };
+    int idle_argc = 1;
+
+    process_t *idle = process_create("/bin/idle", idle_argc, idle_argv, &err);
 
     if (!idle)
         panic("kernel.c: kmain() -> idle process not found\n");
+
+    char *init_argv[] = { "init.bin" };
+    int init_argc = 1;
+
+    process_t *init = process_create("/bin/init", init_argc, init_argv, &err);
 
     if (!init)
         panic("kernel.c: kmain() -> init process not found\n");

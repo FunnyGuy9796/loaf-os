@@ -4,8 +4,9 @@
 #include <stdint.h>
 #include "fat.h"
 
-#define MAX_OPEN_FILES 32
+#define MAX_OPEN_FILES 128
 #define MAX_FDS_PER_PROC 16
+#define MAX_DIRS_PER_PROC 8
 
 typedef struct {
     int in_use;
@@ -14,6 +15,12 @@ typedef struct {
     uint32_t size;
     int writable;
 } open_file_t;
+
+typedef struct {
+    uint16_t cluster;
+    uint32_t index;
+    int in_use;
+} dir_handle_t;
 
 extern open_file_t open_files[MAX_OPEN_FILES];
 

@@ -27,8 +27,7 @@ typedef struct __attribute__((packed)) {
 } fat12_bpb_t;
 
 typedef struct __attribute__((packed)) {
-    uint8_t name[8];
-    uint8_t ext[3];
+    uint8_t  name[11];
     uint8_t attr;
     uint8_t reserved;
     uint8_t create_time_tenths;

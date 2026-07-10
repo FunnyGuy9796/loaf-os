@@ -19,16 +19,23 @@ void pit_handler() {
     tick_count++;
 
     if (scheduler_ready) {
-        process_t *proc = proc_list;
+        for (process_t *proc = proc_list; proc != NULL; proc = proc->next) {
+            if (proc->state == PROC_DEAD) {
+                process_cleanup(proc);
 
-        do {
-            if (proc->state == PROC_BLOCKED && tick_count >= proc->resume_tick) {
-                proc->state = PROC_READY;
-                proc->resume_tick = -1;
+                continue;
             }
 
-            proc = proc->next;
-        } while (proc != NULL);
+            if (proc->state != PROC_BLOCKED || proc->block != PROC_SLEEP)
+                continue;
+
+            if (tick_count < proc->resume_tick)
+                continue;
+
+            proc->state = PROC_READY;
+            proc->block = PROC_NONE;
+            proc->resume_tick = (uint32_t)-1;
+        }
     }
 }
 

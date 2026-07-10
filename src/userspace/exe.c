@@ -73,7 +73,7 @@ int exec_load(const char *path, process_t *proc) {
     if (hdr->magic != EXE_MAGIC)
         return 4;
 
-    uint32_t pd_phys = create_address_space();
+    uint32_t pd_phys = paging_create_address_space();
 
     if (hdr->code_size && map_and_copy(pd_phys, hdr->code_vaddr, (uint8_t *)file_buf + sizeof(exe_header_t), hdr->code_size, PAGE_PRESENT | PAGE_USER))
         return 5;

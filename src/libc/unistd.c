@@ -92,13 +92,78 @@ int rmdir(const char *path) {
     return ret;
 }
 
-int spawn(const char *path) {
+int opendir(const char *path) {
     int ret;
 
     __asm__ volatile (
         "int $0x80"
         : "=a"(ret)
-        : "a"(SYS_SPAWN), "b"(path)
+        : "a"(SYS_OPENDIR), "b"(path)
+        : "memory"
+    );
+
+    return ret;
+}
+
+int readdir(int fd, fat_dirent_info_t *out) {
+    int ret;
+
+    __asm__ volatile (
+        "int $0x80"
+        : "=a"(ret)
+        : "a"(SYS_READDIR), "b"(fd), "c"(out)
+        : "memory"
+    );
+
+    return ret;
+}
+
+int closedir(int fd) {
+    int ret;
+
+    __asm__ volatile (
+        "int $0x80"
+        : "=a"(ret)
+        : "a"(SYS_CLOSEDIR), "b"(fd)
+        : "memory"
+    );
+
+    return ret;
+}
+
+int chdir(const char *path) {
+    int ret;
+
+    __asm__ volatile (
+        "int $0x80"
+        : "=a"(ret)
+        : "a"(SYS_CHDIR), "b"(path)
+        : "memory"
+    );
+
+    return ret;
+}
+
+int getcwd(char *buf, uint32_t max) {
+    int ret;
+
+    __asm__ volatile (
+        "int $0x80"
+        : "=a"(ret)
+        : "a"(SYS_GETCWD), "b"(buf), "c"(max)
+        : "memory"
+    );
+
+    return ret;
+}
+
+int spawn(const char *path, int argc, char *const argv[]) {
+    int ret;
+
+    __asm__ volatile (
+        "int $0x80"
+        : "=a"(ret)
+        : "a"(SYS_SPAWN), "b"(path), "c"(argc), "d"(argv)
         : "memory"
     );
 
@@ -140,6 +205,41 @@ uint32_t usleep(uint32_t ms) {
         : "a"(SYS_SLEEP), "b"(ms)
         : "memory"
     );
+
+    return ret;
+}
+
+int ps(proc_info_t *buf, int max) {
+    int ret;
+
+    __asm__ volatile (
+        "int $0x80"
+        : "=a"(ret)
+        : "a"(SYS_PS), "b"(buf), "c"(max)
+        : "memory"
+    );
+
+    return ret;
+}
+
+int getchar(int blocking) {
+    int ret;
+
+    if (blocking) {
+        __asm__ volatile (
+            "int $0x80"
+            : "=a"(ret)
+            : "a"(SYS_GETCHAR)
+            : "memory"
+        );
+    } else {
+        __asm__ volatile (
+            "int $0x80"
+            : "=a"(ret)
+            : "a"(SYS_GETCHAR_NB)
+            : "memory"
+        );
+    }
 
     return ret;
 }

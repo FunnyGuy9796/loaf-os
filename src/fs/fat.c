@@ -84,6 +84,14 @@ static void fat_set_entry(uint16_t cluster, uint16_t value) {
     }
 }
 
+static inline const uint8_t *fat_entry_basename(const fat12_dirent_t *e) {
+    return &e->name[0];
+}
+
+static inline const uint8_t *fat_entry_ext(const fat12_dirent_t *e) {
+    return &e->name[8];
+}
+
 static void to_fat_name(const char *name, uint8_t out[11]) {
     memset(out, ' ', 11);
 
@@ -374,7 +382,7 @@ static int dir_is_empty(uint16_t dir_cluster) {
     return 1;
 }
 
-static int resolve_path(const char *path, uint16_t *dir_cluster_out, uint8_t final_name[11]) {
+static int resolve_path(const char *path, uint16_t *dir_cluster_out, uint8_t final_name[11], int *is_root_out) {
     uint16_t cur = 0;
     const char *p = path;
     char comp[13];
@@ -412,8 +420,17 @@ static int resolve_path(const char *path, uint16_t *dir_cluster_out, uint8_t fin
         have_pending = 1;
     }
 
-    if (!have_pending)
-        return 4;
+    if (!have_pending) {
+        if (is_root_out)
+            *is_root_out = 1;
+        
+        *dir_cluster_out = 0;
+
+        return 0;
+    }
+
+    if (is_root_out)
+        *is_root_out = 0;
 
     to_fat_name(pending, final_name);
 
@@ -451,9 +468,13 @@ int fat_init() {
 int fat_read_file(const char *path, void *dest, uint32_t *size_out) {
     uint16_t dir_cluster;
     uint8_t target[11];
+    int is_root;
 
-    if (resolve_path(path, &dir_cluster, target))
+    if (resolve_path(path, &dir_cluster, target, &is_root))
         return 1;
+
+    if (is_root)
+        return 3;
 
     dir_slot_t slot;
     int r = dir_lookup(dir_cluster, target, &slot, 0);
@@ -490,9 +511,13 @@ int fat_read_file(const char *path, void *dest, uint32_t *size_out) {
 int fat_write_file(const char *path, const void *data, uint32_t size) {
     uint16_t dir_cluster;
     uint8_t target[11];
+    int is_root;
 
-    if (resolve_path(path, &dir_cluster, target))
+    if (resolve_path(path, &dir_cluster, target, &is_root))
         return 1;
+    
+    if (is_root)
+        return 4;
 
     dir_slot_t slot;
     int r = dir_lookup(dir_cluster, target, &slot, 1);
@@ -574,9 +599,13 @@ int fat_write_at(const char *path, uint32_t offset, const void *data, uint32_t l
 
     uint16_t dir_cluster;
     uint8_t target[11];
+    int is_root;
 
-    if (resolve_path(path, &dir_cluster, target))
+    if (resolve_path(path, &dir_cluster, target, &is_root))
         return 1;
+    
+    if (is_root)
+        return 4;
 
     dir_slot_t slot;
     int r = dir_lookup(dir_cluster, target, &slot, 1);
@@ -698,9 +727,13 @@ int fat_write_at(const char *path, uint32_t offset, const void *data, uint32_t l
 int fat_delete_file(const char *path) {
     uint16_t dir_cluster;
     uint8_t target[11];
+    int is_root;
 
-    if (resolve_path(path, &dir_cluster, target))
+    if (resolve_path(path, &dir_cluster, target, &is_root))
         return 1;
+
+    if (is_root)
+        return 4;
 
     dir_slot_t slot;
     int r = dir_lookup(dir_cluster, target, &slot, 0);
@@ -733,9 +766,22 @@ int fat_delete_file(const char *path) {
 int fat_stat(const char *path, fat_stat_t *out) {
     uint16_t dir_cluster;
     uint8_t target[11];
+    int is_root;
 
-    if (resolve_path(path, &dir_cluster, target))
+    if (resolve_path(path, &dir_cluster, target, &is_root))
         return 1;
+    
+    if (is_root) {
+        memset(out, 0, sizeof(*out));
+
+        out->name[0] = '/';
+        out->name[1] = '\0';
+        out->size = 0;
+        out->first_cluster = 0;
+        out->attr = ATTR_DIRECTORY;
+
+        return 0;
+    }
 
     dir_slot_t slot;
     int r = dir_lookup(dir_cluster, target, &slot, 0);
@@ -761,9 +807,13 @@ int fat_stat(const char *path, fat_stat_t *out) {
 int fat_mkdir(const char *path) {
     uint16_t parent_cluster;
     uint8_t target[11];
+    int is_root;
 
-    if (resolve_path(path, &parent_cluster, target))
+    if (resolve_path(path, &parent_cluster, target, &is_root))
         return 1;
+    
+    if (is_root)
+        return 5;
 
     dir_slot_t slot;
     int r = dir_lookup(parent_cluster, target, &slot, 1);
@@ -826,9 +876,13 @@ int fat_mkdir(const char *path) {
 int fat_rmdir(const char *path) {
     uint16_t parent_cluster;
     uint8_t target[11];
+    int is_root;
 
-    if (resolve_path(path, &parent_cluster, target))
+    if (resolve_path(path, &parent_cluster, target, &is_root))
         return 1;
+    
+    if (is_root)
+        return 6;
 
     dir_slot_t slot;
     int r = dir_lookup(parent_cluster, target, &slot, 0);
@@ -891,10 +945,17 @@ int fat_opendir(const char *path, uint16_t *dir_cluster_out) {
 
     uint16_t parent_cluster;
     uint8_t target[11];
+    int is_root;
 
-    if (resolve_path(path, &parent_cluster, target))
+    if (resolve_path(path, &parent_cluster, target, &is_root))
         return 1;
 
+    if (is_root) {
+        *dir_cluster_out = 0;
+
+        return 0;
+    }
+    
     dir_slot_t slot;
     int r = dir_lookup(parent_cluster, target, &slot, 0);
 

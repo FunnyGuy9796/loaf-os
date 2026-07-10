@@ -1,5 +1,6 @@
 #include "kbd.h"
 #include "../misc/util.h"
+#include "../multi/process.h"
 
 #define KBD_DATA_PORT 0x60
 #define KBD_BUFFER_SIZE 256
@@ -52,6 +53,19 @@ void kbd_handler() {
     if (c) {
         kbd_buffer[kbd_write_pos] = c;
         kbd_write_pos = (kbd_write_pos + 1) % KBD_BUFFER_SIZE;
+
+        process_t *proc = proc_list;
+
+        while (proc) {
+            if (proc->state == PROC_BLOCKED && proc->block == PROC_INPUT) {
+                proc->state = PROC_READY;
+                proc->block = PROC_NONE;
+
+                break;
+            }
+
+            proc = proc->next;
+        }
     }
 }
 

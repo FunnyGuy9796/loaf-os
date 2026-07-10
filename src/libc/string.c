@@ -142,3 +142,25 @@ char *strrchr(const char *s, int c) {
         s++;
     }
 }
+
+char *strcat(char *dest, const char *src) {
+    char *ptr = dest + strlen(dest);
+
+    while (*src)
+        *ptr++ = *src++;
+
+    *ptr = '\0';
+
+    return dest;
+}
+
+char *strncat(char *dest, const char *src, size_t n) {
+    char *ptr = dest + strlen(dest);
+
+    while (*src && n--)
+        *ptr++ = *src++;
+
+    *ptr = '\0';
+
+    return dest;
+}

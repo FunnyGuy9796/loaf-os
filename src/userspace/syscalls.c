@@ -6,13 +6,28 @@
 #include "../multi/process.h"
 #include "../devices/pit.h"
 #include "../devices/rtc.h"
+#include "../devices/kbd.h"
 #include "../mm/pmm.h"
 #include "../mm/paging.h"
+#include "../mm/heap.h"
+
+#define MAX_SPAWN_ARGC 16
+#define MAX_SPAWN_ARGLEN 64
 
 static int alloc_fd(process_t *proc) {
-    for (int i = 0; i < MAX_FDS_PER_PROC; i++)
+    for (int i = 0; i < MAX_FDS_PER_PROC; i++) {
         if (proc->fds[i] == -1)
             return i;
+    }
+
+    return -1;
+}
+
+static int alloc_dirfd(process_t *proc) {
+    for (int i = 0; i < MAX_DIRS_PER_PROC; i++) {
+        if (!proc->dirs[i].in_use)
+            return i;
+    }
 
     return -1;
 }
@@ -44,16 +59,19 @@ void syscall_dispatch(registers_t *regs) {
             curr_proc->state = PROC_DEAD;
             curr_proc->exit_code = regs->ebx;
 
-            process_t *proc = proc_list;
+            process_cleanup(curr_proc);
 
-            do {
-                if (proc->target_pid == curr_proc->pid && proc->state == PROC_BLOCKED) {
-                    proc->state = PROC_READY;
-                    proc->target_pid = -1;
-                }
+            for (process_t *proc = proc_list; proc != NULL; proc = proc->next) {
+                if (proc->state != PROC_BLOCKED || proc->block != PROC_PID)
+                    continue;
 
-                proc = proc->next;
-            } while (proc != NULL);
+                if (proc->target_pid != curr_proc->pid)
+                    continue;
+
+                proc->state = PROC_READY;
+                proc->block = PROC_NONE;
+                proc->target_pid = (uint32_t)-1;
+            }
 
             schedule(regs);
 
@@ -336,6 +354,91 @@ void syscall_dispatch(registers_t *regs) {
             break;
         }
 
+        case SYS_OPENDIR: {
+            char kpath[64];
+
+            if (copy_user_str((const char *)regs->ebx, kpath, sizeof(kpath))) {
+                regs->eax = (uint32_t)-1;
+
+                break;
+            }
+
+            int slot = alloc_dirfd(curr_proc);
+
+            if (slot < 0) {
+                regs->eax = (uint32_t)-1;
+
+                break;
+            }
+
+            uint16_t cluster;
+
+            if (fat_opendir(kpath, &cluster)) {
+                regs->eax = (uint32_t)-1;
+
+                break;
+            }
+
+            curr_proc->dirs[slot].cluster = cluster;
+            curr_proc->dirs[slot].index = 0;
+            curr_proc->dirs[slot].in_use = 1;
+
+            regs->eax = slot;
+
+            break;
+        }
+
+        case SYS_READDIR: {
+            int dirfd = (int)regs->ebx;
+            fat_dirent_info_t *out = (fat_dirent_info_t *)regs->ecx;
+
+            if (dirfd < 0 || dirfd >= MAX_DIRS_PER_PROC || !curr_proc->dirs[dirfd].in_use) {
+                regs->eax = (uint32_t)-1;
+
+                break;
+            }
+
+            if (!paging_validate_user_range(curr_proc->pd_phys, (uint32_t)out, sizeof(fat_dirent_info_t), 1)) {
+                regs->eax = (uint32_t)-1;
+
+                break;
+            }
+
+            dir_handle_t *dh = &curr_proc->dirs[dirfd];
+            fat_dirent_info_t entry;
+            int err = fat_readdir(dh->cluster, dh->index, &entry);
+
+            if (err) {
+                regs->eax = 0;
+
+                break;
+            }
+
+            dh->index++;
+
+            memcpy(out, &entry, sizeof(fat_dirent_info_t));
+
+            regs->eax = 1;
+
+            break;
+        }
+
+        case SYS_CLOSEDIR: {
+            int dirfd = (int)regs->ebx;
+
+            if (dirfd < 0 || dirfd >= MAX_DIRS_PER_PROC || !curr_proc->dirs[dirfd].in_use) {
+                regs->eax = (uint32_t)-1;
+
+                break;
+            }
+
+            curr_proc->dirs[dirfd].in_use = 0;
+
+            regs->eax = 0;
+
+            break;
+        }
+
         case SYS_SPAWN: {
             char kpath[64];
 
@@ -345,8 +448,49 @@ void syscall_dispatch(registers_t *regs) {
                 break;
             }
 
+            int user_argc = (int)regs->ecx;
+            const char *const *user_argv = (const char *const *)regs->edx;
+
+            if (user_argc < 0 || user_argc > MAX_SPAWN_ARGC) {
+                regs->eax = (uint32_t)-1;
+
+                break;
+            }
+
+            char *kargv[MAX_SPAWN_ARGC];
+            char kargbuf[MAX_SPAWN_ARGC][MAX_SPAWN_ARGLEN];
+            int kargc;
+
+            if (user_argc == 0 || user_argv == NULL) {
+                strncpy(kargbuf[0], kpath, MAX_SPAWN_ARGLEN - 1);
+
+                kargbuf[0][MAX_SPAWN_ARGLEN - 1] = '\0';
+                kargv[0] = kargbuf[0];
+                kargc = 1;
+            } else {
+                if (!paging_validate_user_range(curr_proc->pd_phys, (uint32_t)user_argv, user_argc * sizeof(char *), 0)) {
+                    regs->eax = (uint32_t)-1;
+
+                    break;
+                }
+
+                kargc = user_argc;
+
+                for (int i = 0; i < kargc; i++) {
+                    const char *user_str = user_argv[i];
+
+                    if (copy_user_str(user_str, kargbuf[i], MAX_SPAWN_ARGLEN)) {
+                        regs->eax = (uint32_t)-1;
+
+                        break;
+                    }
+
+                    kargv[i] = kargbuf[i];
+                }
+            }
+
             int err = 0;
-            process_t *child = process_create(kpath, &err);
+            process_t *child = process_create(kpath, kargc, kargv, &err);
 
             if (!child) {
                 regs->eax = (uint32_t)-1;
@@ -356,6 +500,7 @@ void syscall_dispatch(registers_t *regs) {
 
             child->ppid = curr_proc->pid;
 
+            set_proc_cwd(child, curr_proc->cwd);
             scheduler_add(child);
 
             regs->eax = child->pid;
@@ -374,16 +519,17 @@ void syscall_dispatch(registers_t *regs) {
 
             proc->state = PROC_DEAD;
 
-            process_t *other_proc = proc_list;
+            for (process_t *other_proc = proc_list; other_proc != NULL; other_proc = other_proc->next) {
+                if (other_proc->state != PROC_BLOCKED || other_proc->block != PROC_PID)
+                    continue;
 
-            do {
-                if (other_proc->target_pid == proc->pid && other_proc->state == PROC_BLOCKED) {
-                    other_proc->state = PROC_READY;
-                    other_proc->target_pid = -1;
-                }
+                if (other_proc->target_pid != proc->pid)
+                    continue;
 
-                other_proc = other_proc->next;
-            } while (other_proc != NULL);
+                other_proc->state = PROC_READY;
+                other_proc->block = PROC_NONE;
+                other_proc->target_pid = (uint32_t)-1;
+            }
 
             if (proc == curr_proc)
                 schedule(regs);
@@ -409,11 +555,19 @@ void syscall_dispatch(registers_t *regs) {
             }
 
             curr_proc->state = PROC_BLOCKED;
+            curr_proc->block = PROC_PID;
             curr_proc->target_pid = proc->pid;
 
             schedule(regs);
 
-            regs->eax = (uint32_t)proc->exit_code;
+            proc = process_find(regs->ebx);
+
+            int code = proc->exit_code;
+
+            proc_unlink(proc);
+            kfree((uint32_t)proc);
+
+            regs->eax = (uint32_t)code;
 
             break;
         }
@@ -422,10 +576,130 @@ void syscall_dispatch(registers_t *regs) {
             uint32_t ms = regs->ebx;
 
             curr_proc->state = PROC_BLOCKED;
+            curr_proc->block = PROC_SLEEP;
             curr_proc->resume_tick = pit_ticks() + ms;
 
             schedule(regs);
 
+            regs->eax = 0;
+
+            break;
+        }
+
+        case SYS_GETCHAR: {
+            int c = kbd_getchar();
+
+            if (c < 0) {
+                curr_proc->state = PROC_BLOCKED;
+                curr_proc->block = PROC_INPUT;
+
+                schedule(regs);
+
+                c = kbd_getchar();
+            }
+
+            regs->eax = (uint32_t)c;
+
+            break;
+        }
+
+        case SYS_GETCHAR_NB: {
+            regs->eax = (uint32_t)kbd_getchar();
+
+            break;
+        }
+
+        case SYS_GETUPTIME: {
+            regs->eax = pit_ticks();
+
+            break;
+        }
+
+        case SYS_PS: {
+            proc_info_t *out = (proc_info_t *)regs->ebx;
+            uint32_t max = regs->ecx;
+            uint32_t total = 0;
+
+            for (process_t *proc = proc_list; proc != NULL; proc = proc->next)
+                total++;
+            
+            if (out == NULL || max == 0) {
+                regs->eax = total;
+
+                break;
+            }
+
+            if (!paging_validate_user_range(curr_proc->pd_phys, (uint32_t)out, max * sizeof(proc_info_t), 1)) {
+                regs->eax = (uint32_t)-1;
+
+                break;
+            }
+
+            uint32_t i = 0;
+
+            for (process_t *proc = proc_list; proc != NULL && i < max; proc = proc->next) {
+                proc_info_t info;
+
+                info.pid = proc->pid;
+                info.ppid = proc->ppid;
+                info.state = proc->state;
+
+                strncpy(info.name, proc->name, MAX_PROC_NAME - 1);
+
+                info.name[MAX_PROC_NAME - 1] = '\0';
+
+                memcpy(&out[i], &info, sizeof(proc_info_t));
+
+                i++;
+            }
+
+            regs->eax = i;
+
+            break;
+        }
+
+        case SYS_CHDIR: {
+            char kpath[MAX_BUF];
+
+            if (copy_user_str((const char *)regs->ebx, kpath, sizeof(kpath))) {
+                regs->eax = (uint32_t)-1;
+
+                break;
+            }
+
+            fat_stat_t st;
+            
+            if (fat_stat(kpath, &st) != 0 && !(st.attr & 0x10)) {
+                regs->eax = (uint32_t)-1;
+
+                break;
+            }
+
+            set_proc_cwd(curr_proc, kpath);
+
+            regs->eax = 0;
+
+            break;
+        }
+
+        case SYS_GETCWD: {
+            char *out = (char *)regs->ebx;
+            uint32_t max = regs->ecx;
+
+            if (!paging_validate_user_range(curr_proc->pd_phys, (uint32_t)out, max, 1)) {
+                regs->eax = (uint32_t)-1;
+
+                break;
+            }
+
+            uint32_t len = strlen(curr_proc->cwd);
+
+            if (len >= max)
+                len = max - 1;
+            
+            memcpy(out, curr_proc->cwd, len);
+
+            out[len] = '\0';
             regs->eax = 0;
 
             break;

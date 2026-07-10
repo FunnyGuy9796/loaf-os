@@ -28,7 +28,7 @@ static inline void invlpg(uint32_t vaddr) {
     __asm__ volatile ("invlpg (%0)" :: "r"(vaddr) : "memory");
 }
 
-uint32_t create_address_space() {
+uint32_t paging_create_address_space() {
     uint32_t pd_phys = pmm_alloc_frame();
     uint32_t *pd = (uint32_t *)phys_to_virt(pd_phys);
 
@@ -40,6 +40,34 @@ uint32_t create_address_space() {
         pd[i] = kpd[i];
 
     return pd_phys;
+}
+
+void paging_destroy_address_space(uint32_t pd_phys) {
+    uint32_t *pd = (uint32_t *)phys_to_virt(pd_phys);
+
+    for (size_t pde_idx = 0; pde_idx < 1024; pde_idx++) {
+        uint32_t pde = pd[pde_idx];
+
+        if (!(pde & PAGE_PRESENT))
+            continue;
+            
+        if (pde_idx >= KERNEL_PDE_START)
+            continue;
+
+        uint32_t pt_phys = pde & ~0xfff;
+        uint32_t *pt = (uint32_t *)phys_to_virt(pt_phys);
+
+        for (int pte_idx = 0; pte_idx < 1024; pte_idx++) {
+            uint32_t pte = pt[pte_idx];
+
+            if (pte & PAGE_PRESENT)
+                pmm_free_frame(pte & ~0xfff);
+        }
+
+        pmm_free_frame(pt_phys);
+    }
+
+    pmm_free_frame(pd_phys);
 }
 
 int paging_map_page(uint32_t pd_phys, uint32_t vaddr, uint32_t paddr, uint32_t flags) {

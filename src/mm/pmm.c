@@ -111,6 +111,8 @@ uint32_t pmm_alloc_frame() {
     }
 
     panic("pmm.c: pmm_alloc_frame() -> out of physical memory\n");
+
+    return (uint32_t)-1;
 }
 
 void pmm_free_frame(uint32_t addr) {
@@ -139,6 +141,8 @@ uint32_t pmm_alloc_frames(uint32_t count) {
     }
 
     panic("pmm.c: pmm_alloc_frames() -> not enough contiguous physical memory\n");
+
+    return (uint32_t)-1;
 }
 
 void pmm_free_frames(uint32_t addr, uint32_t count) {

@@ -5,6 +5,7 @@
 
 void itoa(int value, char *buf, int base);
 void utoa(uint32_t value, char *buf, int base);
+int atoi(const char *str);
 void *malloc(uint32_t size);
 void free(void *ptr);
 

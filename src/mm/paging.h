@@ -20,7 +20,8 @@ static inline uint32_t virt_to_phys(const void *virt) {
     return (uint32_t)virt - KERNEL_VIRT_BASE;
 }
 
-uint32_t create_address_space();
+uint32_t paging_create_address_space();
+void paging_destroy_address_space(uint32_t pd_phys);
 int paging_map_page(uint32_t pd_phys, uint32_t vaddr, uint32_t paddr, uint32_t flags);
 void paging_unmap_page(uint32_t pd_phys, uint32_t vaddr);
 uint32_t paging_get_current_directory(void);

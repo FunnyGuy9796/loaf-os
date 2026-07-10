@@ -25,9 +25,18 @@ struct tm {
 #define SYS_UNLINK 11
 #define SYS_MKDIR 12
 #define SYS_RMDIR 13
-#define SYS_SPAWN 14
-#define SYS_KILL 15
-#define SYS_WAIT 16
-#define SYS_SLEEP 17
+#define SYS_OPENDIR 14
+#define SYS_READDIR 15
+#define SYS_CLOSEDIR 16
+#define SYS_SPAWN 17
+#define SYS_KILL 18
+#define SYS_WAIT 19
+#define SYS_SLEEP 20
+#define SYS_GETCHAR 21
+#define SYS_GETCHAR_NB 22
+#define SYS_GETUPTIME 23
+#define SYS_PS 24
+#define SYS_CHDIR 25
+#define SYS_GETCWD 26
 
 #endif

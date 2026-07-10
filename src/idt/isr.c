@@ -17,11 +17,22 @@ static inline uint32_t get_cr2() {
 static void handle_fault(registers_t *regs) {
     if ((regs->cs & 0x3) == 3) {
         printf("[E] process pid=%d faulted: int=%d err=0x%x eip=0x%x cr2=0x%x\n",
-            curr_proc ? curr_proc->pid : -1,
+            curr_proc ? (int32_t)curr_proc->pid : -1,
             regs->int_no, regs->err_code, regs->eip,
             regs->int_no == 14 ? get_cr2() : 0);
         
         curr_proc->state = PROC_DEAD;
+
+        process_t *proc = proc_list;
+
+        do {
+            if (proc->target_pid == curr_proc->pid && proc->state == PROC_BLOCKED) {
+                proc->state = PROC_READY;
+                proc->target_pid = -1;
+            }
+
+            proc = proc->next;
+        } while (proc != NULL);
 
         schedule(regs);
     } else

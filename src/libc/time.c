@@ -13,3 +13,16 @@ int gettime(struct tm *out) {
 
     return ret;
 }
+
+uint32_t getuptime() {
+    uint32_t ret;
+
+    __asm__ volatile (
+        "int $0x80"
+        : "=a"(ret)
+        : "a"(SYS_GETUPTIME)
+        : "memory"
+    );
+
+    return ret;
+}

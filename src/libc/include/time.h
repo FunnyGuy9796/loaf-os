@@ -13,5 +13,6 @@ struct tm {
 };
 
 int gettime(struct tm *out);
+uint32_t getuptime();
 
 #endif

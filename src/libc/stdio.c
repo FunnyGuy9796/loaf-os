@@ -1,5 +1,6 @@
 #include "include/stdio.h"
 #include "include/stdlib.h"
+#include "include/string.h"
 #include "include/syscall_api.h"
 
 static int vsnprintf(char *buf, size_t size, const char *fmt, va_list args) {
@@ -216,6 +217,18 @@ static int vsnprintf(char *buf, size_t size, const char *fmt, va_list args) {
     buf[i] = '\0';
 
     return (int)i;
+}
+
+int sprintf(char *buf, const char *fmt, ...) {
+    va_list args;
+
+    va_start(args, fmt);
+
+    int len = vsnprintf(buf, (size_t)-1, fmt, args);
+
+    va_end(args);
+    
+    return len;
 }
 
 int snprintf(char *buf, size_t size, const char *fmt, ...) {
