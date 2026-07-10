@@ -10,7 +10,7 @@ int main(int argc, char *argv[]) {
     (void)argc;
 
     if (!argv[1]) {
-        printf("Usage: 'cat <filename>'");
+        printf("Usage: 'cat <filename>'\n");
 
         return 1;
     }
@@ -23,7 +23,7 @@ int main(int argc, char *argv[]) {
     int status = stat(resolved, &st);
 
     if (status < 0) {
-        printf("cat: '%s' not found...", resolved);
+        printf("cat: '%s' not found...\n", resolved);
 
         return 1;
     }
@@ -32,7 +32,7 @@ int main(int argc, char *argv[]) {
     int fd = open(resolved, O_RONLY);
 
     if (fd < 0) {
-        printf("cat: unable to open '%s'...", resolved);
+        printf("cat: unable to open '%s'...\n", resolved);
 
         return 1;
     }
@@ -40,7 +40,7 @@ int main(int argc, char *argv[]) {
     status = read(fd, buf, st.size);
 
     if (status <= 0) {
-        printf("cat: unable to read '%s'", resolved);
+        printf("cat: unable to read '%s'\n", resolved);
 
         return 1;
     }

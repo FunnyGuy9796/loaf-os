@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-#define EXE_MAGIC 0x4c4f4146
+#define EXE_MAGIC 0x46414f4c
 
 typedef struct process process_t;
 

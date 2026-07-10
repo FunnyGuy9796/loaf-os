@@ -3,7 +3,7 @@
 #include <stdint.h>
 #include <string.h>
 
-#define EXE_MAGIC 0x4c4f4146u
+#define EXE_MAGIC 0x46414f4cu
 
 typedef struct {
     unsigned char e_ident[16];
